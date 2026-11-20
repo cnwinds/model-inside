@@ -1,0 +1,32 @@
+# Local model weights, runtime data, and release archives
+/models/
+/recordings/
+/.cache/
+/releases/
+*.safetensors
+*.ckpt
+*.pth
+*.pt
+*.gguf
+
+# Python / tooling
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+node_modules/
+build/
+dist/
+*.egg-info/
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

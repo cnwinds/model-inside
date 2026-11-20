@@ -1,0 +1,11 @@
+numpy
+pillow
+fastapi
+uvicorn
+# 录制（运行模型）时才需要
+torch
+transformers
+# 测试
+pytest
+httpx
+safetensors

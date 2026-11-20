@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>model-inside</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <aside id="controlsPanel">
+    <header>
+      <h1>model-inside</h1>
+      <div id="modelName" class="model-name">加载中…</div>
+      <div id="modelStats" class="muted"></div>
+    </header>
+
+    <div id="weightsSide">
+    <section>
+      <h2>权重视图</h2>
+      <div class="seg">
+        <button id="modeAtlas" class="on">全景</button>
+        <button id="modeStack">叠加</button>
+      </div>
+      <label>块内统计
+        <select id="reduce">
+          <option value="rms" selected>均方根 RMS · 看整体强度</option>
+          <option value="maxabs">块内绝对值最大的权重</option>
+          <option value="mean">块内平均值</option>
+        </select>
+      </label>
+      <label>颜色基准
+        <select id="scope">
+          <option value="role">同类同形状张量共用 · 比层间差异</option>
+          <option value="tensor">每个张量独立 · 看内部纹理</option>
+        </select>
+      </label>
+      <label>色阶上限
+        <select id="range">
+          <option value="1">1 × 基准 RMS</option>
+          <option value="2" selected>2 × 基准 RMS</option>
+          <option value="3">3 × 基准 RMS</option>
+          <option value="6">6 × 基准 RMS</option>
+        </select>
+      </label>
+      <div id="scaleLegend" class="scale-legend">
+        <i class="bar"></i><div><span id="scaleLow"></span><span id="scaleMid"></span><span id="scaleHigh"></span></div>
+      </div>
+      <div class="muted" id="scaleHint"></div>
+    </section>
+
+    <section id="massBox">
+      <h2>参数构成</h2>
+      <div id="massBar" aria-hidden="true"></div><div id="massKey"></div>
+    </section>
+    <section id="stackBox" hidden>
+      <h2>叠加</h2>
+      <label>同形状的一组层
+        <select id="group"></select>
+      </label>
+      <label>方式
+        <select id="agg">
+          <option value="single">逐层查看</option>
+          <option value="mean">全部叠加（各层平均）</option>
+          <option value="maxabs">全部叠加（取绝对值最大）</option>
+          <option value="std">层间差异（标准差）</option>
+        </select>
+      </label>
+      <label id="layerRow"><span id="layerLabel">层</span>
+        <input id="layer" type="range" min="0" max="0" value="0">
+      </label>
+    </section>
+    </div>
+
+    <section>
+      <h2>运行记录</h2>
+      <textarea id="prompt" rows="3" placeholder="输入提示词，运行模型并记录">The capital of France is</textarea>
+      <label class="row">继续生成 <input id="newTokens" type="number" min="0" max="256" value="12"> 个 token</label>
+      <button id="recordBtn">运行并记录</button>
+      <div id="recMsg" class="muted"></div>
+      <label>回放
+        <select id="recSelect"><option value="">不显示</option></select>
+      </label>
+      <div id="thrBox" hidden>
+        <label><span id="thrLabel">激活阈值</span>
+          <input id="thr" type="range" min="0.5" max="20" step="0.5" value="3">
+        </label>
+        <div class="legend"><i class="dot"></i><span>绿色 = 这一步贡献超过阈值的权重</span></div>
+      </div>
+      <div class="muted" id="stepHint" hidden>← → 键逐个切换 token</div>
+    </section>
+  </aside>
+
+  <main>
+    <nav id="tabs">
+      <button id="panelToggle" aria-controls="controlsPanel" aria-expanded="false">设置</button>
+      <button data-view="weights" class="on">权重图</button>
+      <button data-view="attn">注意力</button>
+      <button data-view="lens">逐层预测</button>
+    </nav>
+
+    <div id="stage">
+      <div id="weightsPane" class="pane">
+        <div class="atlas-tools">
+          <strong id="atlasTitle">参数全景</strong><span id="zoomInfo"></span>
+          <button id="zoomOut" aria-label="缩小">−</button><button id="zoomIn" aria-label="放大">+</button>
+          <button id="fitBtn">适应窗口</button>
+        </div>
+        <div class="map-surface"><canvas id="view" aria-label="权重地图：滚轮缩放，拖动平移，双击查看一个张量"></canvas></div>
+        <div class="probe"><div><strong id="probeTitle">权重探针</strong><span id="status"></span></div>
+          <button id="comparePick" hidden>对照同类层</button>
+        </div>
+      </div>
+
+      <div id="attnView" class="pane" hidden>
+        <div id="attnEmpty" class="empty"></div>
+        <div id="attnBody" class="view-body" data-panel="arcs">
+          <p class="pane-note">线越粗，注意力越集中。矩阵的行是当前词，列是它所看的词；点一行可跳到对应位置。</p>
+          <div class="view-switch" aria-label="注意力图表">
+            <button data-panel="arcs" aria-pressed="true">连线</button><button data-panel="matrix" aria-pressed="false">矩阵</button><button data-panel="heads" aria-pressed="false">各头一览</button>
+          </div>
+          <div class="attn-bar">
+            <label class="inline">层 <input id="attnLayer" type="range" min="0" max="0" value="0"><span id="attnLayerLabel" class="num"></span></label>
+            <label class="inline">头 <select id="attnHead"></select></label>
+          </div>
+          <div id="attnCaption" class="caption"></div>
+          <div class="attn-grid">
+            <div class="attn-left">
+              <canvas id="attnArcs"></canvas>
+              <div id="attnHover" class="caption muted"></div>
+              <canvas id="attnMatrix"></canvas>
+            </div>
+            <div class="attn-right">
+              <div class="pane-title">各层各头一览（点一格选中）</div>
+              <canvas id="attnOverview"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="lensView" class="pane" hidden>
+        <div id="lensEmpty" class="empty"></div>
+        <div id="lensBody" class="view-body" data-panel="table">
+          <p class="pane-note">每格是该层的第一候选。底色越亮，最终答案在这一层的概率越高；亮绿色文字表示第一候选与最终答案一致。</p>
+          <div class="view-switch" aria-label="逐层预测图表">
+            <button data-panel="table" aria-pressed="true">预测表</button><button data-panel="rank" aria-pressed="false">排名曲线</button><button data-panel="picks" aria-pressed="false">候选词</button>
+          </div>
+          <div class="lens-grid">
+            <div class="lens-sheet">
+              <div class="lens-table-wrap"><table id="lensTable" aria-label="各层的第一候选"></table></div>
+              <div class="page-bar">
+                <div><button id="prevLayers" aria-label="上一页层">‹</button><span id="layerRange"></span><button id="nextLayers" aria-label="下一页层">›</button></div>
+                <div><button id="prevSteps" aria-label="上一页位置">‹</button><span id="stepRange"></span><button id="nextSteps" aria-label="下一页位置">›</button></div>
+              </div>
+            </div>
+            <div class="lens-side">
+              <div class="lens-selection"><div id="lensTitle" class="pane-title"></div><select id="lensLayer" aria-label="查看哪一层的预测"></select></div>
+              <div class="lens-rank">
+                <div id="lensSummary" class="summary"></div>
+                <div class="pane-title">最终答案的排名 · 对数刻度，点曲线选层</div>
+                <canvas id="lensChart"></canvas>
+              </div>
+              <div class="lens-candidates"><div id="lensPick" class="caption"></div><div id="lensTop"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="player" hidden>
+      <div class="controls">
+        <button id="playBtn">播放</button>
+        <input id="stepSlider" type="range" min="0" max="0" value="0">
+        <span id="stepLabel" class="num"></span>
+        <select id="speed">
+          <option value="1">1 步/秒</option>
+          <option value="2">2 步/秒</option>
+          <option value="4" selected>4 步/秒</option>
+          <option value="8">8 步/秒</option>
+        </select>
+      </div>
+      <div id="tokens"></div>
+    </div>
+  </main>
+  <script src="/static/views.js"></script>
+  <script src="/static/atlas-ui.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
